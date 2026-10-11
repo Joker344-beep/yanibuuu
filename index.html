@@ -58,6 +58,24 @@ td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertic
 .plus{color:var(--accent);font-weight:700}.minus{color:var(--red);font-weight:700}
 .mini .card{width:34px;height:48px;font-size:.8rem}.mini .card .s{font-size:.85rem}
 .tablewrap{overflow-x:auto}
+.summary{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.pill{border-radius:999px;padding:6px 14px;font-weight:700;font-size:.95rem}
+.pill.win{background:rgba(31,111,92,.15);color:var(--accent)}
+.pill.lose{background:rgba(192,57,43,.13);color:var(--red)}
+.rlist{display:flex;flex-direction:column;gap:8px}
+.rrow{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px}
+.rrow.win{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.rrow.lose{border-color:var(--red);box-shadow:0 0 0 2px var(--red) inset}
+.rank{text-align:center;font-size:1.7rem;line-height:1}
+.rank small{display:block;font-size:.8rem;font-weight:700;color:var(--muted);margin-top:2px}
+.rname{font-weight:700;margin-bottom:4px}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;border-radius:6px;padding:1px 6px;margin-left:4px;vertical-align:middle;border:1px solid var(--line);color:var(--muted)}
+.tag.win{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tag.lose{background:var(--red);border-color:var(--red);color:#fff}
+.rnum{text-align:right;white-space:nowrap}
+.rnum .t{font-size:1.25rem;font-weight:800}
+.rnum .gap{font-size:.82rem;color:var(--muted)}
+.rnum .d{font-size:1.05rem}
 .yaniv-pop{position:fixed;inset:0;z-index:10;cursor:pointer;text-align:center;
   background:radial-gradient(circle at 50% 45%,rgba(40,20,70,.75),rgba(0,0,0,.88));animation:popFade .6s ease 5.6s forwards}
 .yaniv-pop::before{content:"";position:absolute;inset:0;background:#fff;animation:flash .6s ease-out forwards;pointer-events:none}
@@ -367,20 +385,53 @@ function renderGame(){
   <div class="panel"><h2>これまで</h2>${logHTML()}</div>
   <div class="row"><button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
 }
+// 順位をつける（同じ値は同じ順位）。cmp が負なら a のほうが上
+function ranking(vals,cmp){
+  return vals.map((_,i)=>i).sort((a,b)=>cmp(vals[a],vals[b])||a-b)
+    .map(i=>({i,rank:1+vals.filter(x=>cmp(x,vals[i])<0).length}));
+}
+function medal(rank){
+  return `${['','🥇','🥈','🥉'][rank]||'　'}<small>${rank}位</small>`;
+}
+function signed(n){return n>0?'+'+n:n<0?'−'+(-n):'±0';}
 function renderResult(){
   const r=S.result;
-  const rows=S.players.map((q,i)=>{
-    const dl=r.delta[i];
-    return `<tr><td>${esc(q.name)}${i===r.declarer?' <b>（宣言）</b>':''}</td>
-      <td><div class="cards mini">${r.hands[i].map(c=>cardHTML(c)).join('')}</div></td>
-      <td>${r.totals[i]}</td>
-      <td class="${dl>0?'plus':dl<0?'minus':''}">${dl>0?'+':''}${dl||'±0'}</td>
-      <td><b>${q.score}</b></td></tr>`;
+  const win=r.delta.findIndex(d=>d>0), lose=r.delta.findIndex(d=>d<0);
+  const name=i=>esc(S.players[i].name);
+  // 今回のラウンド：手札の合計が少ない順
+  const roundRank=ranking(r.totals,(a,b)=>a-b);
+  const best=r.totals[roundRank[0].i];
+  const roundRows=roundRank.map(({i,rank})=>{
+    const d=r.delta[i], cls=i===win?'win':i===lose?'lose':'';
+    return `<div class="rrow ${cls}">
+      <div class="rank">${medal(rank)}</div>
+      <div><div class="rname">${name(i)}${i===S.you?'（あなた）':''}
+          ${i===r.declarer?'<span class="tag">宣言</span>':''}
+          ${i===win?'<span class="tag win">勝ち</span>':''}${i===lose?'<span class="tag lose">負け</span>':''}</div>
+        <div class="cards mini">${r.hands[i].map(c=>cardHTML(c)).join('')}</div></div>
+      <div class="rnum"><div class="t">合計 ${r.totals[i]}</div>
+        <div class="gap">${r.totals[i]===best?'最少':'1位と '+(r.totals[i]-best)+' 差'}</div>
+        <div class="d ${d>0?'plus':d<0?'minus':''}">${signed(d)} 点</div></div>
+    </div>`;
   }).join('');
+  // 総合順位：点数が多い順
+  const scores=S.players.map(p=>p.score);
+  const totalRank=ranking(scores,(a,b)=>b-a);
+  const top=scores[totalRank[0].i];
+  const totalRows=totalRank.map(({i,rank})=>`<div class="rrow">
+      <div class="rank">${medal(rank)}</div>
+      <div class="rname">${name(i)}${i===S.you?'（あなた）':''}</div>
+      <div class="rnum"><div class="t">${S.players[i].score} 点</div>
+        <div class="gap">${scores[i]===top?'トップ':'トップまで '+(top-scores[i])+' 点'}</div></div>
+    </div>`).join('');
   app.innerHTML=`${header('第'+S.round+'ラウンド 結果')}
-  <div class="panel center"><div class="big">${esc(r.text)}</div></div>
-  <div class="panel tablewrap"><table>
-    <tr><th>名前</th><th>手札</th><th>合計</th><th>今回</th><th>点数</th></tr>${rows}</table></div>
+  <div class="panel center"><div class="big">${esc(r.text)}</div>
+    <div class="summary">
+      <span class="pill win">🏆 ${name(win)} さんの勝ち ${signed(r.delta[win])}点</span>
+      <span class="pill lose">💥 ${name(lose)} さんの負け ${signed(r.delta[lose])}点</span>
+    </div></div>
+  <div class="panel"><h2>今回のラウンド <span class="muted">手札の合計が少ない順</span></h2><div class="rlist">${roundRows}</div></div>
+  <div class="panel"><h2>総合順位 <span class="muted">${S.round}ラウンド終了時点</span></h2><div class="rlist">${totalRows}</div></div>
   <div class="panel">次のラウンドは <b>${esc(S.players[r.loser].name)}</b> さんから</div>
   <div class="msg">${esc(err)}</div>
   <div class="row"><button class="primary" onclick="act('next')">次のラウンドへ</button>
