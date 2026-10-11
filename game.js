@@ -1,4 +1,4 @@
-// ヤニブのゲーム進行（サーバー側で持つ正本）
+// ヤニブのゲーム進行（部屋を作った人のブラウザ、または server.js が持つ正本）
 const SUITS = ['♠', '♥', '♦', '♣'];
 
 function shuffle(a) {
@@ -204,4 +204,5 @@ class Game {
   }
 }
 
-module.exports = { Game, analyze };
+// Node（server.js）からも、ブラウザ（<script src="game.js">）からも使えるように
+if (typeof module !== 'undefined' && module.exports) module.exports = { Game, analyze };

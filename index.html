@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ヤニブ オンライン</title>
+<style>
+:root{
+  --bg:#f4f1ea; --panel:#fffdf8; --ink:#222; --muted:#777; --line:#ddd6c8;
+  --accent:#1f6f5c; --accent-ink:#fff; --red:#c0392b; --warn:#b5651d;
+  --card:#fff; --card-line:#bbb; --sel:#f2c94c;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1b1d1c; --panel:#252827; --ink:#eee; --muted:#9a9a9a; --line:#3a3e3c;
+    --accent:#3fa58a; --accent-ink:#0d1a16; --red:#ff6b5b; --warn:#e3a35a;
+    --card:#f7f5ef; --card-line:#888; --sel:#f2c94c; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif;}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:.2em 0 .6em}
+h2{font-size:1.1rem;margin:.2em 0 .5em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.muted{color:var(--muted);font-size:.9rem}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:10px 16px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.yaniv{background:var(--warn);color:#fff;border-color:var(--warn);font-weight:700}
+button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);min-width:0}
+.scores{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}
+.score{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:.9rem}
+.score.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.score b{font-size:1.1rem}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:4px}
+.dot.off{background:var(--muted);opacity:.5}
+.cards{display:flex;flex-wrap:wrap;gap:6px}
+.card{width:52px;height:74px;border-radius:7px;background:var(--card);border:1px solid var(--card-line);color:#222;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;user-select:none;transition:transform .1s}
+.card .s{font-size:1.2rem;line-height:1}
+.card.red{color:#c0392b}
+.card.jk{color:#6a3fb5;font-size:.8rem}
+.card.click{cursor:pointer}
+.card.sel{transform:translateY(-10px);box-shadow:0 0 0 3px var(--sel)}
+.card.pick{box-shadow:0 0 0 3px var(--accent);cursor:pointer}
+.card.dim{opacity:.45}
+.card.back{background:repeating-linear-gradient(45deg,#2b5d8a,#2b5d8a 6px,#3a72a3 6px,#3a72a3 12px);border-color:#1d3f5e;color:#fff}
+.card.back.pick{cursor:pointer}
+.table{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.msg{min-height:1.4em;color:var(--red);font-size:.9rem;margin-top:6px}
+.banner{background:var(--warn);color:#fff;padding:8px 12px;border-radius:8px;margin-bottom:12px;font-size:.9rem}
+.log{font-size:.88rem;max-height:9em;overflow:auto;margin:0;padding-left:1.2em}
+.center{text-align:center}
+.big{font-size:1.5rem;font-weight:700;margin:.3em 0}
+.code{font-size:2rem;font-weight:800;letter-spacing:.2em}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:middle}
+.plus{color:var(--accent);font-weight:700}.minus{color:var(--red);font-weight:700}
+.mini .card{width:34px;height:48px;font-size:.8rem}.mini .card .s{font-size:.85rem}
+.tablewrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<main id="app"><p class="muted">読み込み中…</p></main>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="game.js"></script>
+<script>
+// 部屋を作った人（ホスト）のブラウザがゲームを持ち、他の人はブラウザ同士で直接つながる
+const PREFIX='yanibuuu-room-';
+const KEY='yaniv-p2p-v1';
+const HOST_KEY=code=>'yaniv-p2p-host-'+code;
+let S=null, me=null, sel=new Set(), err='', offline=false, status='';
+let peer=null;
+let H=null; const conns=new Map();   // ホスト用：ゲームと各席の接続
+let conn=null, retryTimer=null;      // 参加者用：ホストへの接続
+const app=document.getElementById('app');
+
+function store(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function fetchStore(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
+function randHex(){const a=new Uint8Array(16);crypto.getRandomValues(a);return [...a].map(b=>b.toString(16).padStart(2,'0')).join('');}
+function randCode(){const ch='ABCDEFGHJKLMNPQRSTUVWXYZ';const a=new Uint8Array(4);crypto.getRandomValues(a);return [...a].map(b=>ch[b%ch.length]).join('');}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function shareLink(){return location.origin+location.pathname+'?room='+me.room;}
+
+function setState(v){
+  S=v; offline=false; status=''; err='';
+  const ids=new Set(S.hand.map(c=>c.id));
+  for(const id of [...sel]) if(!ids.has(id)) sel.delete(id);
+  if(S.phase!=='play'||S.cur!==S.you) sel.clear();
+  render();
+}
+function teardown(){
+  clearTimeout(retryTimer);
+  if(peer&&!peer.destroyed) peer.destroy();
+  peer=null; conn=null; H=null; conns.clear(); S=null; offline=false; status='';
+}
+function fail(msg){teardown();me=null;store(KEY,null);err=msg;history.replaceState(null,'',location.pathname);render();}
+
+// ---------- ホスト ----------
+function hostSync(){
+  store(HOST_KEY(H.code),{game:H.game,tokens:H.tokens});
+  const online=[0,...conns.keys()];
+  for(const [seat,c] of conns) if(c.open) c.send({type:'state',view:H.game.view(seat,online)});
+  setState(H.game.view(0,online));
+}
+function applyAction(seat,m){
+  const g=H.game;
+  switch(m.type){
+    case 'start': g.start(seat); break;
+    case 'play': g.play(seat,m.ids); break;
+    case 'undo': g.undo(seat); break;
+    case 'draw': g.draw(seat,m.from,m.idx); break;
+    case 'yaniv': g.yaniv(seat); break;
+    case 'next': g.next(); break;
+    default: throw new Error('不明な操作です');
+  }
+}
+function onGuestData(c,m){
+  if(!m||typeof m!=='object') return;
+  if(m.type==='join'){
+    let token=typeof m.token==='string'?m.token:null;
+    let seat=token!=null?H.tokens[token]:undefined;
+    if(seat===undefined){
+      const name=String(m.name||'').trim().slice(0,12);
+      if(!name){c.send({type:'error',msg:'名前を入れてください',fatal:true});return;}
+      try{seat=H.game.addPlayer(name);}catch(e){c.send({type:'error',msg:e.message,fatal:true});return;}
+      token=randHex(); H.tokens[token]=seat;
+    }
+    const old=conns.get(seat); if(old&&old!==c) old.close();
+    c.seat=seat; conns.set(seat,c);
+    c.send({type:'joined',token});
+    hostSync();
+    return;
+  }
+  if(m.type==='action'&&c.seat!==undefined&&m.action&&typeof m.action==='object'){
+    try{applyAction(c.seat,m.action);}catch(e){c.send({type:'error',msg:e.message});return;}
+    hostSync();
+  }
+}
+function startHost(saved){
+  H={code:me.room,game:saved?Object.assign(new Game(),saved.game):new Game(),tokens:saved?saved.tokens:{}};
+  if(!saved) H.game.addPlayer(me.name);
+  let tries=0;
+  const open=()=>{
+    status=saved?'部屋を再開しています…':'部屋を準備しています…'; render();
+    peer=new Peer(PREFIX+H.code);
+    peer.on('open',()=>{hostSync();});
+    peer.on('connection',c=>{
+      c.on('data',m=>onGuestData(c,m));
+      c.on('close',()=>{if(conns.get(c.seat)===c){conns.delete(c.seat);if(H)hostSync();}});
+    });
+    peer.on('disconnected',()=>{if(!peer.destroyed){offline=true;render();peer.reconnect();}});
+    peer.on('error',e=>{
+      if(e.type==='unavailable-id'){
+        peer.destroy();
+        if(!saved){ // 部屋番号がかぶった → 別の番号で作り直す
+          store(HOST_KEY(H.code),null);
+          H.code=me.room=randCode(); store(KEY,me);
+          history.replaceState(null,'','?room='+me.room);
+          open();
+        }else if(++tries<20){ // 再読み込み直後は前の接続が残っていることがある
+          setTimeout(open,3000);
+        }else fail('部屋を再開できませんでした。もう一度作り直してください');
+        return;
+      }
+      if(e.type==='browser-incompatible'){fail('このブラウザでは遊べません');return;}
+      offline=true; render();
+    });
+  };
+  open();
+}
+
+// ---------- 参加者 ----------
+function startGuest(){
+  status='部屋に接続しています…'; render();
+  peer=new Peer();
+  peer.on('open',connectHost);
+  peer.on('disconnected',()=>{if(!peer.destroyed)peer.reconnect();});
+  peer.on('error',e=>{
+    if(!me) return;
+    if(e.type==='peer-unavailable'&&!S){fail('部屋が見つかりません。部屋番号と、部屋を作った人がページを開いたままか確認してください');return;}
+    if(e.type==='browser-incompatible'){fail('このブラウザでは遊べません');return;}
+    offline=true; render(); scheduleRetry();
+  });
+}
+function connectHost(){
+  if(!me||!peer) return;
+  if(conn) conn.close();
+  const c=conn=peer.connect(PREFIX+me.room,{reliable:true});
+  c.on('open',()=>c.send({type:'join',name:me.name,token:me.token}));
+  c.on('data',m=>{
+    if(!m||c!==conn) return;
+    if(m.type==='joined'){me.token=m.token;store(KEY,me);}
+    else if(m.type==='state') setState(m.view);
+    else if(m.type==='error'){if(m.fatal) fail(m.msg); else {err=m.msg;render();}}
+  });
+  c.on('close',()=>{if(c!==conn||!me) return;offline=true;render();scheduleRetry();});
+}
+function scheduleRetry(){
+  clearTimeout(retryTimer);
+  retryTimer=setTimeout(()=>{
+    if(!me||!peer) return;
+    if(peer.open) connectHost(); else scheduleRetry();
+  },3000);
+}
+
+// ---------- 操作 ----------
+function act(type,extra={}){
+  const m={type,...extra};
+  if(H){
+    try{applyAction(0,m);hostSync();}catch(e){err=e.message;render();}
+    return;
+  }
+  if(!conn||!conn.open){err='接続が切れています。再接続を待ってください';render();return;}
+  conn.send({type:'action',action:m});
+}
+function enter(kind){
+  const name=document.getElementById('name').value.trim().slice(0,12);
+  const room=document.getElementById('room').value.trim().toUpperCase();
+  if(!name){err='名前を入れてください';render();return;}
+  err='';
+  if(kind==='create'){
+    me={role:'host',name,room:randCode()};
+    store(KEY,me); history.replaceState(null,'','?room='+me.room);
+    startHost(null);
+  }else{
+    if(!/^[A-Z]{4}$/.test(room)){err='部屋番号（4文字）を入れてください';render();return;}
+    me={role:'guest',name,room,token:null};
+    store(KEY,me); history.replaceState(null,'','?room='+me.room);
+    startGuest();
+  }
+}
+function leave(){
+  const msg=H?'部屋を閉じますか？ 他の人も遊べなくなります':'この部屋から抜けますか？';
+  if(!confirm(msg)) return;
+  if(H) store(HOST_KEY(H.code),null);
+  teardown(); me=null; store(KEY,null); err='';
+  history.replaceState(null,'',location.pathname); render();
+}
+
+// ---------- 描画 ----------
+function cardHTML(c,cls='',attrs=''){
+  const red=(c.s==='♥'||c.s==='♦')?' red':'';
+  if(c.r===0) return `<div class="card jk ${cls}" ${attrs}><span class="s">★</span>JOKER</div>`;
+  return `<div class="card${red} ${cls}" ${attrs}><span>${label(c)}</span><span class="s">${c.s}</span></div>`;
+}
+function scoresHTML(){
+  return `<div class="scores">${S.players.map((p,i)=>`<div class="score ${i===S.cur&&S.phase!=='result'?'cur':''}">
+    <span class="dot ${p.online?'':'off'}"></span>${esc(p.name)}${i===S.you?'（あなた）':''}<br>
+    <b>${p.score}</b> 点 <span class="muted">／${p.handCount}枚</span></div>`).join('')}</div>`;
+}
+function logHTML(){return `<ol class="log">${S.log.map(l=>`<li>${esc(l)}</li>`).join('')}</ol>`;}
+function header(sub){
+  return `<h1>ヤニブ <span class="muted">${sub} ／ 部屋 ${esc(me.room)}</span></h1>
+  ${offline?`<div class="banner">${H?'接続が不安定です。再接続しています…':'部屋を作った人との接続が切れました。再接続しています…'}</div>`:''}
+  ${H?'<p class="muted">あなたが部屋主です。このページを閉じたりスリープしたりすると、全員の接続が切れます。</p>':''}`;
+}
+function render(){
+  if(!me){app.innerHTML=entryHTML();return;}
+  if(!S){app.innerHTML=`<p class="muted">${esc(status||'接続中…')}</p><div class="row"><button onclick="leave()">やめる</button></div>`;return;}
+  if(S.phase==='lobby') return renderLobby();
+  if(S.phase==='result') return renderResult();
+  renderGame();
+}
+function entryHTML(){
+  const q=new URLSearchParams(location.search).get('room')||'';
+  return `<h1>ヤニブ オンライン</h1>
+  <div class="panel">
+    <div class="row" style="margin-bottom:12px"><label>名前 <input id="name" maxlength="12" placeholder="例：たろう"></label></div>
+    <div class="row" style="margin-bottom:12px">
+      <input id="room" maxlength="4" size="6" placeholder="部屋番号" value="${esc(q)}" style="text-transform:uppercase">
+      <button class="primary" onclick="enter('join')">部屋に入る</button>
+    </div>
+    <div class="row"><span class="muted">または</span><button onclick="enter('create')">新しく部屋を作る</button></div>
+    <div class="msg">${esc(err)}</div>
+  </div>
+  <div class="panel muted">3〜5人で遊べます。誰か1人が部屋を作り、部屋番号かリンクを他の人に送ってください。
+  部屋を作った人は、遊び終わるまでこのページを開いたままにしてください。</div>`;
+}
+function renderLobby(){
+  const link=shareLink();
+  app.innerHTML=`${header('待合室')}
+  <div class="panel center">
+    <div class="muted">部屋番号</div><div class="code">${esc(me.room)}</div>
+    <div class="row" style="justify-content:center;margin-top:8px">
+      <input readonly value="${esc(link)}" style="width:min(340px,100%)" onclick="this.select()">
+      <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(link)}').then(()=>{this.textContent='コピーしました'})">リンクをコピー</button>
+    </div>
+  </div>
+  <div class="panel"><h2>参加者（${S.players.length}/5）</h2>
+    <ol>${S.players.map((p,i)=>`<li><span class="dot ${p.online?'':'off'}"></span>${esc(p.name)}${i===0?'（部屋主）':''}${i===S.you?'（あなた）':''}</li>`).join('')}</ol>
+    ${H
+      ?`<div class="row"><button class="primary" ${S.players.length>=3?'':'disabled'} onclick="act('start')">はじめる</button>
+         <span class="muted">${S.players.length<3?'3人以上で始められます':''}</span></div>`
+      :'<p class="muted">部屋主が始めるのを待っています…</p>'}
+    <div class="msg">${esc(err)}</div>
+  </div>
+  <div class="row"><button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
+}
+function renderGame(){
+  const mine=S.cur===S.you, drawing=S.phase==='draw', g=S.top;
+  const curName=esc(S.players[S.cur].name);
+  const endIdx=g.length===1?[0]:[0,g.length-1];
+  const prevCards=g.map((c,i)=>{
+    const can=mine&&drawing&&endIdx.includes(i);
+    return cardHTML(c,can?'pick':(drawing?'dim':''),can?`onclick="act('draw',{from:'pile',idx:${i}})"`:'');
+  }).join('');
+  const canDeck=mine&&drawing&&S.canDeck;
+  const selectable=mine&&!drawing;
+  const hand=S.hand.map(c=>cardHTML(c,(selectable?'click ':'')+(sel.has(c.id)?'sel':''),selectable?`onclick="toggle(${c.id})"`:'')).join('');
+  const chosen=S.hand.filter(c=>sel.has(c.id));
+  const valid=analyze(chosen);
+  let controls;
+  if(!mine){
+    controls=`<p class="muted">${curName} さんが${drawing?'カードを引くところです':'考えています'}…</p>`;
+  }else if(drawing){
+    controls=`<p><b>1枚引いてください：</b>山札か、前の人のカードの光っている端を選ぶ</p>
+      <div class="row"><button onclick="act('undo')">出すのをやり直す</button></div>`;
+  }else{
+    controls=`<div class="row">
+      <button class="primary" ${valid?'':'disabled'} onclick="act('play',{ids:[...sel]})">出す${chosen.length?`（${chosen.length}枚）`:''}</button>
+      <button class="yaniv" ${S.total<=5?'':'disabled'} onclick="doYaniv()">ヤニブ！</button>
+      <span class="muted">${chosen.length&&!valid?'この組み合わせは出せません':'1枚／同じ数字2枚以上／同じマーク3枚以上の連番'}</span>
+    </div>`;
+  }
+  app.innerHTML=`${header('第'+S.round+'ラウンド')}
+  <div class="panel">${scoresHTML()}</div>
+  <div class="panel">
+    <div class="big" style="font-size:1.1rem">${mine?'あなたの番です':curName+' さんの番'}</div>
+    <div class="table">
+      <div><div class="muted">山札（${S.deckCount}枚）</div>
+        <div class="cards">${canDeck?`<div class="card back pick" onclick="act('draw',{from:'deck'})">引く</div>`:`<div class="card back ${drawing&&mine?'dim':''}"></div>`}</div></div>
+      <div><div class="muted">前の人が出したカード</div><div class="cards">${prevCards}</div></div>
+      ${drawing?`<div><div class="muted">${mine?'今出したカード':curName+' さんが出したカード'}</div><div class="cards mini">${S.pending.map(c=>cardHTML(c)).join('')}</div></div>`:''}
+    </div>
+  </div>
+  <div class="panel">
+    <h2>あなたの手札 <span class="muted">合計 ${S.total}</span></h2>
+    <div class="cards" style="padding-top:10px">${hand}</div>
+    <div class="msg">${esc(err)}</div>
+    ${controls}
+  </div>
+  <div class="panel"><h2>これまで</h2>${logHTML()}</div>
+  <div class="row"><button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
+}
+function renderResult(){
+  const r=S.result;
+  const rows=S.players.map((q,i)=>{
+    const dl=r.delta[i];
+    return `<tr><td>${esc(q.name)}${i===r.declarer?' <b>（宣言）</b>':''}</td>
+      <td><div class="cards mini">${r.hands[i].map(c=>cardHTML(c)).join('')}</div></td>
+      <td>${r.totals[i]}</td>
+      <td class="${dl>0?'plus':dl<0?'minus':''}">${dl>0?'+':''}${dl||'±0'}</td>
+      <td><b>${q.score}</b></td></tr>`;
+  }).join('');
+  app.innerHTML=`${header('第'+S.round+'ラウンド 結果')}
+  <div class="panel center"><div class="big">${esc(r.text)}</div></div>
+  <div class="panel tablewrap"><table>
+    <tr><th>名前</th><th>手札</th><th>合計</th><th>今回</th><th>点数</th></tr>${rows}</table></div>
+  <div class="panel">次のラウンドは <b>${esc(S.players[r.loser].name)}</b> さんから</div>
+  <div class="msg">${esc(err)}</div>
+  <div class="row"><button class="primary" onclick="act('next')">次のラウンドへ</button>
+    <button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
+}
+function toggle(id){sel.has(id)?sel.delete(id):sel.add(id);err='';render();}
+function doYaniv(){if(confirm(`合計 ${S.total} でヤニブを宣言しますか？`)) act('yaniv');}
+
+// ---------- 起動 ----------
+if(typeof Peer==='undefined'){
+  app.innerHTML='<p>通信ライブラリを読み込めませんでした。ネットにつながっているか確認して、再読み込みしてください。</p>';
+}else{
+  me=fetchStore(KEY);
+  const qRoom=(new URLSearchParams(location.search).get('room')||'').toUpperCase();
+  if(me&&qRoom&&qRoom!==me.room) me=null; // 別の部屋のリンクで開いたら入り直し
+  if(me&&me.role==='host'){
+    const saved=fetchStore(HOST_KEY(me.room));
+    if(saved) startHost(saved); else me=null;
+  }else if(me&&me.role==='guest') startGuest();
+  render();
+}
+</script>
+</body>
+</html>
