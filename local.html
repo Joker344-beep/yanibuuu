@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ヤニブ</title>
+<style>
+:root{
+  --bg:#f4f1ea; --panel:#fffdf8; --ink:#222; --muted:#777; --line:#ddd6c8;
+  --accent:#1f6f5c; --accent-ink:#fff; --red:#c0392b; --warn:#b5651d;
+  --card:#fff; --card-line:#bbb; --sel:#f2c94c;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1b1d1c; --panel:#252827; --ink:#eee; --muted:#9a9a9a; --line:#3a3e3c;
+    --accent:#3fa58a; --accent-ink:#0d1a16; --red:#ff6b5b; --warn:#e3a35a;
+    --card:#f7f5ef; --card-line:#888; --sel:#f2c94c; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif;}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:.2em 0 .6em}
+h2{font-size:1.1rem;margin:.2em 0 .5em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.muted{color:var(--muted);font-size:.9rem}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:10px 16px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.yaniv{background:var(--warn);color:#fff;border-color:var(--warn);font-weight:700}
+button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.scores{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}
+.score{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:.9rem}
+.score.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.score b{font-size:1.1rem}
+.cards{display:flex;flex-wrap:wrap;gap:6px}
+.card{width:52px;height:74px;border-radius:7px;background:var(--card);border:1px solid var(--card-line);color:#222;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;user-select:none;position:relative;transition:transform .1s}
+.card .s{font-size:1.2rem;line-height:1}
+.card.red{color:#c0392b}
+.card.jk{color:#6a3fb5;font-size:.8rem}
+.card.click{cursor:pointer}
+.card.sel{transform:translateY(-10px);box-shadow:0 0 0 3px var(--sel)}
+.card.pick{box-shadow:0 0 0 3px var(--accent);cursor:pointer}
+.card.dim{opacity:.45}
+.card.back{background:repeating-linear-gradient(45deg,#2b5d8a,#2b5d8a 6px,#3a72a3 6px,#3a72a3 12px);border-color:#1d3f5e;color:#fff;cursor:pointer}
+.table{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.msg{min-height:1.4em;color:var(--red);font-size:.9rem;margin-top:6px}
+.log{font-size:.88rem;max-height:9em;overflow:auto;margin:0;padding-left:1.2em}
+.center{text-align:center}
+.big{font-size:1.6rem;font-weight:700;margin:.4em 0}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:middle}
+.plus{color:var(--accent);font-weight:700}.minus{color:var(--red);font-weight:700}
+.mini .card{width:34px;height:48px;font-size:.8rem}.mini .card .s{font-size:.85rem}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+const SUITS=['♠','♥','♦','♣'];
+const SAVE_KEY='yaniv-proto-v1';
+let G=null, sel=new Set(), errMsg='';
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function newDeck(){let id=0;const d=[];for(const s of SUITS)for(let r=1;r<=13;r++)d.push({s,r,id:id++});d.push({s:'JK',r:0,id:id++},{s:'JK',r:0,id:id++});return shuffle(d);}
+function pts(c){return c.r===0?0:Math.min(c.r,10);}
+function total(h){return h.reduce((a,c)=>a+pts(c),0);}
+function label(c){return c.r===0?'JK':({1:'A',11:'J',12:'Q',13:'K'}[c.r]||String(c.r));}
+function name(c){return c.r===0?'ジョーカー':c.s+label(c);}
+function groupName(g){return g.map(name).join('・');}
+function sortHand(h){h.sort((a,b)=>(a.r||99)-(b.r||99)||SUITS.indexOf(a.s)-SUITS.indexOf(b.s));}
+function esc(s){return String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));}
+
+// 出せる形かを判定し、並べた順で返す（ジョーカーは代用）
+function analyze(cards){
+  const n=cards.length; if(!n) return null;
+  if(n===1) return cards.slice();
+  const jk=cards.filter(c=>c.r===0), nj=cards.filter(c=>c.r!==0);
+  if(nj.every(c=>c.r===nj[0].r)) return [...nj,...jk];
+  if(n>=3 && nj.every(c=>c.s===nj[0].s)){
+    const rs=nj.map(c=>c.r).sort((a,b)=>a-b);
+    if(new Set(rs).size===rs.length){
+      const s=Math.min(rs[0],14-n);
+      if(s>=1 && s+n-1>=rs[rs.length-1]){
+        const byR=new Map(nj.map(c=>[c.r,c])), js=[...jk], order=[];
+        for(let r=s;r<s+n;r++) order.push(byR.get(r)||js.pop());
+        return order;
+      }
+    }
+  }
+  return null;
+}
+
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(G));}catch(e){}}
+function load(){try{const s=localStorage.getItem(SAVE_KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
+function clearSave(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
+
+function startGame(names){
+  G={players:names.map(n=>({name:n,score:0,hand:[]})),round:0,starter:0};
+  startRound();
+}
+function startRound(){
+  G.round++;
+  G.deck=newDeck();
+  for(const p of G.players){p.hand=G.deck.splice(0,5);sortHand(p.hand);}
+  G.pile=[[G.deck.pop()]];  // 捨て札：出された組のリスト（最後が一番上）
+  G.cur=G.starter; G.phase='handoff'; G.pending=null; G.result=null;
+  G.log=[`第${G.round}ラウンド開始。最初は ${G.players[G.cur].name} さん。`];
+  sel.clear(); errMsg='';
+}
+function topGroup(){return G.pile[G.pile.length-1];}
+function ends(g){return g.length===1?[0]:[0,g.length-1];}
+
+function doPlay(){
+  const p=G.players[G.cur];
+  const chosen=p.hand.filter(c=>sel.has(c.id));
+  const order=analyze(chosen);
+  if(!order){errMsg='その組み合わせは出せません';render();return;}
+  p.hand=p.hand.filter(c=>!sel.has(c.id));
+  G.pending=order; G.phase='draw'; sel.clear(); errMsg='';
+  render();
+}
+function undoPlay(){
+  const p=G.players[G.cur];
+  p.hand.push(...G.pending); sortHand(p.hand);
+  G.pending=null; G.phase='play'; render();
+}
+function refillDeck(){
+  // 捨て札の一番上（前の人が出した組）だけ残して、残りを混ぜて山札に
+  const keep=G.pile.pop();
+  G.deck=shuffle(G.pile.flat());
+  G.pile=[keep];
+}
+function doDraw(from,idx){
+  const p=G.players[G.cur]; let card, how;
+  if(from==='deck'){
+    if(!G.deck.length) refillDeck();
+    if(!G.deck.length) return;
+    card=G.deck.pop(); how='山札から引いた';
+  }else{
+    const g=topGroup(); card=g.splice(idx,1)[0]; how=`捨て札の ${name(card)} を取った`;
+    if(!g.length) G.pile.pop();
+  }
+  p.hand.push(card); sortHand(p.hand);
+  G.log.push(`${p.name}：${groupName(G.pending)} を出して、${how}`);
+  G.pile.push(G.pending); G.pending=null;
+  if(!G.deck.length && G.pile.length>1) {refillDeck(); G.log.push('山札がなくなったので捨て札を混ぜ直しました');}
+  G.cur=(G.cur+1)%G.players.length; G.phase='handoff';
+  render();
+}
+function doYaniv(){
+  const n=G.players.length, d=G.cur;
+  const t=G.players.map(p=>total(p.hand));
+  if(t[d]>5) return;
+  if(!confirm(`合計 ${t[d]} でヤニブを宣言しますか？`)) return;
+  const others=[]; for(let k=1;k<n;k++) others.push((d+k)%n); // 宣言者の次から近い順
+  const delta=Array(n).fill(0); let text, loser;
+  const counters=others.filter(i=>t[i]<=t[d]);
+  if(counters.length){
+    const m=Math.min(...counters.map(i=>t[i]));
+    const w=counters.find(i=>t[i]===m);
+    delta[d]=-15; delta[w]=15; loser=d;
+    text=`ヤニブ返し！ ${G.players[w].name} さんが返しました`;
+  }else{
+    const m=Math.max(...others.map(i=>t[i]));
+    const hi=others.find(i=>t[i]===m);
+    const diff=m-t[d];
+    delta[d]=diff; delta[hi]=-diff; loser=hi;
+    text=`ヤニブ成功！ 差 ＝ ${m} − ${t[d]} ＝ ${diff}`;
+  }
+  G.players.forEach((p,i)=>p.score+=delta[i]);
+  G.result={declarer:d,totals:t,delta,text,loser};
+  G.starter=loser; G.phase='result';
+  render();
+}
+
+// ---------- 描画 ----------
+function cardHTML(c,cls='',attrs=''){
+  const red=(c.s==='♥'||c.s==='♦')?' red':'';
+  if(c.r===0) return `<div class="card jk ${cls}" ${attrs}><span class="s">★</span>JOKER</div>`;
+  return `<div class="card${red} ${cls}" ${attrs}><span>${label(c)}</span><span class="s">${c.s}</span></div>`;
+}
+function scoresHTML(){
+  return `<div class="scores">${G.players.map((p,i)=>`<div class="score ${i===G.cur&&G.phase!=='result'?'cur':''}">
+    ${esc(p.name)}<br><b>${p.score}</b> 点 <span class="muted">／${p.hand.length}枚</span></div>`).join('')}</div>`;
+}
+function logHTML(){
+  return `<ol class="log">${G.log.slice(-8).map(l=>`<li>${esc(l)}</li>`).join('')}</ol>`;
+}
+
+function render(){
+  const app=document.getElementById('app');
+  if(!G){app.innerHTML=setupHTML();bindSetup();return;}
+  save();
+  const p=G.players[G.cur];
+  if(G.phase==='handoff'){
+    app.innerHTML=`<h1>ヤニブ <span class="muted">第${G.round}ラウンド</span></h1>
+    <div class="panel">${scoresHTML()}</div>
+    <div class="panel center">
+      <div class="muted">端末を渡してください</div>
+      <div class="big">${esc(p.name)} さんの番</div>
+      <p class="muted">他の人は画面を見ないでね</p>
+      <button class="primary" onclick="G.phase='play';render()">手札を見る</button>
+    </div>
+    <div class="panel"><h2>これまで</h2>${logHTML()}</div>
+    <div class="row"><button onclick="quitGame()">ゲームをやめる</button></div>`;
+    return;
+  }
+  if(G.phase==='play'||G.phase==='draw'){
+    const g=topGroup(), drawing=G.phase==='draw';
+    const prevCards=g.map((c,i)=>{
+      const can=drawing&&ends(g).includes(i);
+      return cardHTML(c,can?'pick':(drawing?'dim':''),can?`onclick="doDraw('pile',${i})"`:'');
+    }).join('');
+    const canDeck=drawing&&(G.deck.length>0||G.pile.length>1);
+    const hand=p.hand.map(c=>cardHTML(c,(drawing?'':'click ')+(sel.has(c.id)?'sel':''),drawing?'':`onclick="toggle(${c.id})"`)).join('');
+    const tot=total(p.hand);
+    const chosen=p.hand.filter(c=>sel.has(c.id));
+    const valid=analyze(chosen);
+    app.innerHTML=`<h1>ヤニブ <span class="muted">第${G.round}ラウンド</span></h1>
+    <div class="panel">${scoresHTML()}</div>
+    <div class="panel">
+      <div class="table">
+        <div><div class="muted">山札（${G.deck.length}枚）</div>
+          <div class="cards">${canDeck?`<div class="card back" onclick="doDraw('deck')">引く</div>`:`<div class="card back dim"></div>`}</div></div>
+        <div><div class="muted">前の人が出したカード${drawing?'（光っている端から取れます）':''}</div>
+          <div class="cards">${prevCards}</div></div>
+        ${drawing?`<div><div class="muted">今出したカード</div><div class="cards mini">${G.pending.map(c=>cardHTML(c)).join('')}</div></div>`:''}
+      </div>
+    </div>
+    <div class="panel">
+      <h2>${esc(p.name)} さんの手札 <span class="muted">合計 ${tot}</span></h2>
+      <div class="cards" style="padding-top:10px">${hand}</div>
+      <div class="msg">${esc(errMsg)}</div>
+      ${drawing
+        ? `<p><b>1枚引いてください：</b>山札か、前の人のカードの端を選ぶ</p><div class="row"><button onclick="undoPlay()">出すのをやり直す</button></div>`
+        : `<div class="row">
+            <button class="primary" ${valid?'':'disabled'} onclick="doPlay()">出す${chosen.length?`（${chosen.length}枚）`:''}</button>
+            <button class="yaniv" ${tot<=5?'':'disabled'} onclick="doYaniv()">ヤニブ！</button>
+            <span class="muted">${chosen.length&&!valid?'この組み合わせは出せません':'1枚／同じ数字2枚以上／同じマーク3枚以上の連番'}</span>
+          </div>`}
+    </div>
+    <div class="panel"><h2>これまで</h2>${logHTML()}</div>`;
+    return;
+  }
+  if(G.phase==='result'){
+    const r=G.result;
+    const rows=G.players.map((q,i)=>{
+      const dl=r.delta[i];
+      return `<tr><td>${esc(q.name)}${i===r.declarer?' <b>（宣言）</b>':''}</td>
+        <td><div class="cards mini">${q.hand.map(c=>cardHTML(c)).join('')}</div></td>
+        <td>${r.totals[i]}</td>
+        <td class="${dl>0?'plus':dl<0?'minus':''}">${dl>0?'+':''}${dl||'±0'}</td>
+        <td><b>${q.score}</b></td></tr>`;
+    }).join('');
+    app.innerHTML=`<h1>ヤニブ <span class="muted">第${G.round}ラウンド 結果</span></h1>
+    <div class="panel center"><div class="big">${esc(r.text)}</div></div>
+    <div class="panel"><table>
+      <tr><th>名前</th><th>手札</th><th>合計</th><th>今回</th><th>点数</th></tr>${rows}</table></div>
+    <div class="panel">次のラウンドは <b>${esc(G.players[r.loser].name)}</b> さんから</div>
+    <div class="row"><button class="primary" onclick="startRound();render()">次のラウンドへ</button>
+      <button onclick="quitGame()">ゲームをやめる</button></div>`;
+  }
+}
+function toggle(id){sel.has(id)?sel.delete(id):sel.add(id);errMsg='';render();}
+function quitGame(){if(confirm('ゲームをやめて最初の画面に戻りますか？')){G=null;clearSave();render();}}
+
+function setupHTML(){
+  const saved=load();
+  return `<h1>ヤニブ（1台で遊ぶ試作）</h1>
+  ${saved?`<div class="panel row"><span>前回のゲームが残っています（第${saved.round}ラウンド）</span>
+    <button class="primary" id="resume">続きから</button></div>`:''}
+  <div class="panel">
+    <h2>新しいゲーム</h2>
+    <div class="row" style="margin-bottom:10px"><label>人数 <select id="cnt">
+      <option>3</option><option selected>4</option><option>5</option></select></label></div>
+    <div id="names" class="row"></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="go">はじめる</button></div>
+  </div>
+  <div class="panel muted">1台の端末を順番に回して遊びます。自分の番が来たら「手札を見る」を押してください。
+  手札の合計が5以下ならヤニブ宣言できます。点数は多いほど良い。</div>`;
+}
+function bindSetup(){
+  const cnt=document.getElementById('cnt'), box=document.getElementById('names');
+  const draw=()=>{const n=+cnt.value, old=[...box.querySelectorAll('input')].map(i=>i.value);
+    box.innerHTML=Array.from({length:n},(_,i)=>`<input size="10" value="${esc(old[i]||'プレイヤー'+(i+1))}">`).join('');};
+  cnt.onchange=draw; draw();
+  document.getElementById('go').onclick=()=>{
+    const names=[...box.querySelectorAll('input')].map((i,k)=>i.value.trim()||'プレイヤー'+(k+1));
+    startGame(names); render();
+  };
+  const r=document.getElementById('resume'); if(r) r.onclick=()=>{G=load();render();};
+}
+render();
+</script>
+</body>
+</html>

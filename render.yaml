@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: yaniv
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
