@@ -58,15 +58,28 @@ td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertic
 .plus{color:var(--accent);font-weight:700}.minus{color:var(--red);font-weight:700}
 .mini .card{width:34px;height:48px;font-size:.8rem}.mini .card .s{font-size:.85rem}
 .tablewrap{overflow-x:auto}
-.yaniv-pop{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.6);cursor:pointer;text-align:center;padding:16px;animation:popFade .5s ease 2.8s forwards}
-.yaniv-pop .word{font-size:clamp(4rem,20vw,9rem);font-weight:900;color:#fff;line-height:1.1;
-  text-shadow:0 6px 0 var(--warn),0 0 40px rgba(242,201,76,.7);animation:popIn .55s cubic-bezier(.2,1.6,.4,1) both}
-.yaniv-pop .who{color:#fff;font-size:1.2rem;margin-top:.6em;animation:popIn .3s .2s both}
-.yaniv-pop .sub{color:var(--sel);font-size:clamp(1.5rem,7vw,2.4rem);font-weight:800;margin-top:.3em;animation:popIn .45s .9s both}
-@keyframes popIn{from{transform:scale(.2) rotate(-10deg);opacity:0}to{transform:none;opacity:1}}
+.yaniv-pop{position:fixed;inset:0;z-index:10;cursor:pointer;text-align:center;
+  background:radial-gradient(circle at 50% 45%,rgba(40,20,70,.75),rgba(0,0,0,.88));animation:popFade .6s ease 5.6s forwards}
+.yaniv-pop::before{content:"";position:absolute;inset:0;background:#fff;animation:flash .6s ease-out forwards;pointer-events:none}
+.yaniv-pop canvas{position:absolute;inset:0;width:100%;height:100%}
+.yaniv-pop .inner{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;
+  animation:shake .6s .15s both}
+.yaniv-pop .word{font-size:clamp(4.5rem,22vw,11rem);font-weight:900;line-height:1.1;letter-spacing:.02em;
+  background:linear-gradient(90deg,#ff5252,#ffd740,#69f0ae,#40c4ff,#e040fb,#ff5252);background-size:300% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 6px 0 rgba(0,0,0,.5)) drop-shadow(0 0 28px rgba(255,215,64,.8));
+  animation:popIn .6s cubic-bezier(.2,1.7,.4,1) both,rainbow 2s linear infinite,pulse .9s .7s ease-in-out infinite alternate}
+.yaniv-pop .who{color:#fff;font-size:1.25rem;margin-top:.6em;text-shadow:0 2px 6px #000;animation:popIn .3s .3s both}
+.yaniv-pop .sub{color:#ffd740;font-size:clamp(1.8rem,9vw,3.2rem);font-weight:900;margin-top:.25em;text-shadow:0 3px 0 #b5651d,0 0 20px rgba(255,215,64,.6);
+  animation:popIn .5s 1s cubic-bezier(.2,1.7,.4,1) both}
+.yaniv-pop .hint{position:absolute;bottom:16px;left:0;right:0;color:rgba(255,255,255,.6);font-size:.85rem}
+@keyframes popIn{from{transform:scale(.1) rotate(-15deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes pulse{to{transform:scale(1.08)}}
+@keyframes rainbow{to{background-position:300% 0}}
+@keyframes flash{from{opacity:.9}to{opacity:0}}
+@keyframes shake{0%,100%{transform:none}15%{transform:translate(-14px,6px)}30%{transform:translate(12px,-8px)}45%{transform:translate(-9px,-4px)}60%{transform:translate(7px,5px)}75%{transform:translate(-4px,2px)}}
 @keyframes popFade{to{opacity:0;visibility:hidden}}
-@media (prefers-reduced-motion: reduce){.yaniv-pop,.yaniv-pop *{animation-duration:.01s!important;animation-delay:0s!important}.yaniv-pop{animation:none}}
+@media (prefers-reduced-motion: reduce){.yaniv-pop *,.yaniv-pop::before{animation:none!important}}
 </style>
 </head>
 <body>
@@ -373,18 +386,63 @@ function renderResult(){
   <div class="row"><button class="primary" onclick="act('next')">次のラウンドへ</button>
     <button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
 }
-// ヤニブ宣言の瞬間に全員の画面へ大きく表示（タップか約3秒で消える）
+// ヤニブ宣言の瞬間に全員の画面へ花火つきで大きく表示（タップか約6秒で消える）
 function showYaniv(v){
   document.querySelectorAll('.yaniv-pop').forEach(e=>e.remove());
   const r=v.result, el=document.createElement('div');
   el.className='yaniv-pop';
-  el.innerHTML=`<div class="word">ヤニブ！</div>
+  el.innerHTML=`<canvas></canvas><div class="inner">
+    <div class="word">ヤニブ！</div>
     <div class="who">${esc(v.players[r.declarer].name)} さんの宣言（合計 ${r.totals[r.declarer]}）</div>
-    <div class="sub">${esc(r.text.split('！')[0])}！</div>`;
+    <div class="sub">${esc(r.text.split('！')[0])}！</div></div>
+    <div class="hint">タップで閉じる</div>`;
   el.onclick=()=>el.remove();
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(),3400);
-  try{navigator.vibrate&&navigator.vibrate([120,60,200]);}catch(e){}
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches) fireworks(el.querySelector('canvas'),5200);
+  setTimeout(()=>el.remove(),6300);
+  try{navigator.vibrate&&navigator.vibrate([150,80,150,80,300]);}catch(e){}
+}
+function fireworks(canvas,duration){
+  const ctx=canvas.getContext('2d'), dpr=Math.min(devicePixelRatio||1,2);
+  const W=()=>innerWidth, Ht=()=>innerHeight;
+  canvas.width=W()*dpr; canvas.height=Ht()*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  const colors=['#ff5252','#ffd740','#69f0ae','#40c4ff','#e040fb','#ffab40','#ffffff'];
+  const pick=()=>colors[Math.random()*colors.length|0];
+  const G=0.12, rockets=[], sparks=[], t0=performance.now();
+  let last=0;
+  const launch=()=>{
+    const ty=Ht()*(0.12+Math.random()*0.35);
+    rockets.push({x:W()*(0.1+Math.random()*0.8),y:Ht(),vx:(Math.random()-0.5)*2,vy:-Math.sqrt(2*G*(Ht()-ty)),c:pick()});
+  };
+  const burst=(x,y,c)=>{
+    const n=80+Math.random()*60|0, c2=pick(), big=Math.random()<0.3?1.5:1;
+    for(let i=0;i<n;i++){
+      const a=Math.random()*Math.PI*2, s=(2+Math.random()*5.5)*big;
+      sparks.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:0.007+Math.random()*0.012,c:Math.random()<0.7?c:c2});
+    }
+  };
+  // 最初にいきなり3発
+  for(let i=0;i<3;i++) burst(W()*(0.2+0.3*i),Ht()*(0.2+Math.random()*0.15),pick());
+  const frame=now=>{
+    if(!canvas.isConnected) return;
+    if(now-t0<duration&&now-last>230){launch();if(Math.random()<0.5)launch();last=now;}
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.fillRect(0,0,W(),Ht());
+    ctx.globalCompositeOperation='lighter';
+    for(let i=rockets.length-1;i>=0;i--){
+      const p=rockets[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=G;
+      ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,Math.PI*2); ctx.fill();
+      if(p.vy>=-0.5){burst(p.x,p.y,p.c);rockets.splice(i,1);}
+    }
+    for(let i=sparks.length-1;i>=0;i--){
+      const p=sparks[i]; p.vx*=0.985; p.vy=p.vy*0.985+0.06; p.x+=p.vx; p.y+=p.vy; p.life-=p.decay;
+      if(p.life<=0){sparks.splice(i,1);continue;}
+      ctx.globalAlpha=p.life; ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,3*p.life+0.8,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
 }
 function toggle(id){sel.has(id)?sel.delete(id):sel.add(id);err='';render();}
 function doYaniv(){if(confirm(`合計 ${S.total} でヤニブを宣言しますか？`)) act('yaniv');}
