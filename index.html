@@ -90,6 +90,17 @@ td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertic
 .yaniv-pop .who{color:#fff;font-size:1.25rem;margin-top:.6em;text-shadow:0 2px 6px #000;animation:popIn .3s .3s both}
 .yaniv-pop .sub{color:#ffd740;font-size:clamp(1.8rem,9vw,3.2rem);font-weight:900;margin-top:.25em;text-shadow:0 3px 0 #b5651d,0 0 20px rgba(255,215,64,.6);
   animation:popIn .5s 1s cubic-bezier(.2,1.7,.4,1) both}
+.yaniv-pop.long{animation-delay:7s}
+.yaniv-pop .face{font-size:clamp(5rem,26vw,11rem);line-height:1.1;margin-top:.1em;
+  animation:faceIn .7s 1.4s cubic-bezier(.2,1.8,.4,1) both,wobble .45s 2.1s ease-in-out infinite alternate}
+.yaniv-pop .taunt{color:#fff;font-size:clamp(1.2rem,5.5vw,1.9rem);font-weight:900;margin-top:.2em;
+  text-shadow:0 3px 0 #e040fb,0 0 18px rgba(224,64,251,.7);animation:popIn .4s 2s cubic-bezier(.2,1.7,.4,1) both}
+.yaniv-pop .taunt small{display:block;font-size:.65em;font-weight:700;color:#ffd740;text-shadow:0 2px 4px #000;margin-top:.2em}
+.yaniv-pop .rain{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.yaniv-pop .rain span{position:absolute;top:-15%;animation:fall linear both}
+@keyframes faceIn{from{transform:scale(0) rotate(200deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes wobble{from{transform:rotate(-14deg) scale(1)}to{transform:rotate(14deg) scale(1.12)}}
+@keyframes fall{to{transform:translateY(135vh) rotate(var(--spin))}}
 .yaniv-pop .hint{position:absolute;bottom:16px;left:0;right:0;color:rgba(255,255,255,.6);font-size:.85rem}
 @keyframes popIn{from{transform:scale(.1) rotate(-15deg);opacity:0}to{transform:none;opacity:1}}
 @keyframes pulse{to{transform:scale(1.08)}}
@@ -441,17 +452,39 @@ function renderResult(){
 function showYaniv(v){
   document.querySelectorAll('.yaniv-pop').forEach(e=>e.remove());
   const r=v.result, el=document.createElement('div');
-  el.className='yaniv-pop';
-  el.innerHTML=`<canvas></canvas><div class="inner">
+  const counter=r.declarer===r.loser; // ヤニブ返し（宣言した人が負け）
+  const winner=r.delta.findIndex(d=>d>0);
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.className='yaniv-pop'+(counter?' long':'');
+  el.innerHTML=`<canvas></canvas><div class="rain"></div><div class="inner">
     <div class="word">ヤニブ！</div>
     <div class="who">${esc(v.players[r.declarer].name)} さんの宣言（合計 ${r.totals[r.declarer]}）</div>
-    <div class="sub">${esc(r.text.split('！')[0])}！</div></div>
+    <div class="sub">${esc(r.text.split('！')[0])}！</div>
+    ${counter?`<div class="face">😜</div>
+      <div class="taunt">${esc(v.players[winner].name)}「べーっ！」
+        <small>${esc(v.players[r.declarer].name)} さん、返されてやんの〜 ${r.totals[winner]} ≦ ${r.totals[r.declarer]}</small></div>`:''}
+    </div>
     <div class="hint">タップで閉じる</div>`;
   el.onclick=()=>el.remove();
   document.body.appendChild(el);
-  if(!matchMedia('(prefers-reduced-motion: reduce)').matches) fireworks(el.querySelector('canvas'),5200);
-  setTimeout(()=>el.remove(),6300);
+  if(!reduce) fireworks(el.querySelector('canvas'),counter?6200:5200);
+  if(counter&&!reduce) tongueRain(el.querySelector('.rain'));
+  setTimeout(()=>el.remove(),counter?7700:6300);
   try{navigator.vibrate&&navigator.vibrate([150,80,150,80,300]);}catch(e){}
+}
+// ヤニブ返しのときに降らせるベロ出し絵文字
+function tongueRain(box){
+  const faces=['😜','😝','😛','🤪','👅','😜','😆'];
+  for(let i=0;i<40;i++){
+    const s=document.createElement('span');
+    s.textContent=faces[Math.random()*faces.length|0];
+    s.style.left=(Math.random()*95)+'%';
+    s.style.fontSize=(1.8+Math.random()*2.8)+'rem';
+    s.style.animationDuration=(2.2+Math.random()*2.5)+'s';
+    s.style.animationDelay=(1.2+Math.random()*4)+'s';
+    s.style.setProperty('--spin',((Math.random()<.5?-1:1)*(180+Math.random()*540))+'deg');
+    box.appendChild(s);
+  }
 }
 function fireworks(canvas,duration){
   const ctx=canvas.getContext('2d'), dpr=Math.min(devicePixelRatio||1,2);
