@@ -58,6 +58,15 @@ td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertic
 .plus{color:var(--accent);font-weight:700}.minus{color:var(--red);font-weight:700}
 .mini .card{width:34px;height:48px;font-size:.8rem}.mini .card .s{font-size:.85rem}
 .tablewrap{overflow-x:auto}
+.yaniv-pop{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.6);cursor:pointer;text-align:center;padding:16px;animation:popFade .5s ease 2.8s forwards}
+.yaniv-pop .word{font-size:clamp(4rem,20vw,9rem);font-weight:900;color:#fff;line-height:1.1;
+  text-shadow:0 6px 0 var(--warn),0 0 40px rgba(242,201,76,.7);animation:popIn .55s cubic-bezier(.2,1.6,.4,1) both}
+.yaniv-pop .who{color:#fff;font-size:1.2rem;margin-top:.6em;animation:popIn .3s .2s both}
+.yaniv-pop .sub{color:var(--sel);font-size:clamp(1.5rem,7vw,2.4rem);font-weight:800;margin-top:.3em;animation:popIn .45s .9s both}
+@keyframes popIn{from{transform:scale(.2) rotate(-10deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes popFade{to{opacity:0;visibility:hidden}}
+@media (prefers-reduced-motion: reduce){.yaniv-pop,.yaniv-pop *{animation-duration:.01s!important;animation-delay:0s!important}.yaniv-pop{animation:none}}
 </style>
 </head>
 <body>
@@ -83,7 +92,9 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function shareLink(){return location.origin+location.pathname+'?room='+me.room;}
 
 function setState(v){
+  const prev=S&&S.phase;
   S=v; offline=false; status=''; err='';
+  if(v.phase==='result'&&prev&&prev!=='result') showYaniv(v);
   const ids=new Set(S.hand.map(c=>c.id));
   for(const id of [...sel]) if(!ids.has(id)) sel.delete(id);
   if(S.phase!=='play'||S.cur!==S.you) sel.clear();
@@ -361,6 +372,19 @@ function renderResult(){
   <div class="msg">${esc(err)}</div>
   <div class="row"><button class="primary" onclick="act('next')">次のラウンドへ</button>
     <button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
+}
+// ヤニブ宣言の瞬間に全員の画面へ大きく表示（タップか約3秒で消える）
+function showYaniv(v){
+  document.querySelectorAll('.yaniv-pop').forEach(e=>e.remove());
+  const r=v.result, el=document.createElement('div');
+  el.className='yaniv-pop';
+  el.innerHTML=`<div class="word">ヤニブ！</div>
+    <div class="who">${esc(v.players[r.declarer].name)} さんの宣言（合計 ${r.totals[r.declarer]}）</div>
+    <div class="sub">${esc(r.text.split('！')[0])}！</div>`;
+  el.onclick=()=>el.remove();
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),3400);
+  try{navigator.vibrate&&navigator.vibrate([120,60,200]);}catch(e){}
 }
 function toggle(id){sel.has(id)?sel.delete(id):sel.add(id);err='';render();}
 function doYaniv(){if(confirm(`合計 ${S.total} でヤニブを宣言しますか？`)) act('yaniv');}
