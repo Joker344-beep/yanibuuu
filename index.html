@@ -5,22 +5,30 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ヤニブ オンライン</title>
 <style>
+/* カジノのカードテーブル風（緑のフェルト＋金の縁取り）。明るい／暗いモード共通 */
 :root{
-  --bg:#f4f1ea; --panel:#fffdf8; --ink:#222; --muted:#777; --line:#ddd6c8;
-  --accent:#1f6f5c; --accent-ink:#fff; --red:#c0392b; --warn:#b5651d;
-  --card:#fff; --card-line:#bbb; --sel:#f2c94c;
-}
-@media (prefers-color-scheme: dark){
-  :root{ --bg:#1b1d1c; --panel:#252827; --ink:#eee; --muted:#9a9a9a; --line:#3a3e3c;
-    --accent:#3fa58a; --accent-ink:#0d1a16; --red:#ff6b5b; --warn:#e3a35a;
-    --card:#f7f5ef; --card-line:#888; --sel:#f2c94c; }
+  --bg:#0c5a38; --panel:rgba(0,0,0,.24); --ink:#f4f8f2; --muted:rgba(232,244,236,.72); --line:rgba(255,255,255,.16);
+  --accent:#e9c25a; --accent-ink:#2b2100; --red:#ff8a7a; --warn:#e07a26;
+  --card:#fff; --card-line:#9a9a9a; --sel:#ffe27a; --gold:#c9a23f;
+  color-scheme:dark;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif;}
+html{background:#06341f}
+body{margin:0;min-height:100vh;color:var(--ink);font-family:system-ui,"Hiragino Sans","Yu Gothic UI",sans-serif;
+  background:
+    radial-gradient(ellipse at 50% 35%,rgba(255,255,255,.10),transparent 60%),
+    repeating-radial-gradient(circle at 30% 20%,rgba(0,0,0,.035) 0 1px,transparent 1px 3px),
+    repeating-radial-gradient(circle at 70% 80%,rgba(255,255,255,.025) 0 1px,transparent 1px 4px),
+    radial-gradient(ellipse at center,#178a55 0%,#0e6b41 50%,#07432a 100%);
+  background-attachment:fixed;
+  box-shadow:inset 0 0 120px rgba(0,0,0,.55);}
 main{max-width:760px;margin:0 auto;padding:16px}
-h1{font-size:1.4rem;margin:.2em 0 .6em}
+h1{font-size:1.4rem;margin:.2em 0 .6em;color:var(--accent);text-shadow:0 2px 4px rgba(0,0,0,.5)}
+h1 .muted{text-shadow:none}
 h2{font-size:1.1rem;margin:.2em 0 .5em}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.panel{background:var(--panel);border:1px solid rgba(233,194,90,.35);border-radius:14px;padding:14px;margin-bottom:12px;
+  box-shadow:0 4px 14px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.06)}
+.card{box-shadow:0 2px 5px rgba(0,0,0,.35)}
 .muted{color:var(--muted);font-size:.9rem}
 button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:10px 16px;cursor:pointer}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
@@ -41,8 +49,8 @@ input{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);ba
 .card.red{color:#c0392b}
 .card.jk{color:#6a3fb5;font-size:.8rem}
 .card.click{cursor:pointer}
-.card.sel{transform:translateY(-10px);box-shadow:0 0 0 3px var(--sel)}
-.card.pick{box-shadow:0 0 0 3px var(--accent);cursor:pointer}
+.card.sel{transform:translateY(-10px);box-shadow:0 0 0 3px var(--sel),0 8px 16px rgba(0,0,0,.45)}
+.card.pick{box-shadow:0 0 0 3px var(--accent),0 0 16px rgba(233,194,90,.8);cursor:pointer}
 .card.dim{opacity:.45}
 .card.back{background:repeating-linear-gradient(45deg,#2b5d8a,#2b5d8a 6px,#3a72a3 6px,#3a72a3 12px);border-color:#1d3f5e;color:#fff}
 .card.back.pick{cursor:pointer}
@@ -58,10 +66,11 @@ td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertic
 .plus{color:var(--accent);font-weight:700}.minus{color:var(--red);font-weight:700}
 .mini .card{width:34px;height:48px;font-size:.8rem}.mini .card .s{font-size:.85rem}
 .tablewrap{overflow-x:auto}
+.lastmove{margin-top:12px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.28);border-left:4px solid var(--accent);font-size:.95rem}
 .summary{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
 .pill{border-radius:999px;padding:6px 14px;font-weight:700;font-size:.95rem}
-.pill.win{background:rgba(31,111,92,.15);color:var(--accent)}
-.pill.lose{background:rgba(192,57,43,.13);color:var(--red)}
+.pill.win{background:rgba(233,194,90,.18);color:var(--accent)}
+.pill.lose{background:rgba(255,138,122,.16);color:var(--red)}
 .rlist{display:flex;flex-direction:column;gap:8px}
 .rrow{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px}
 .rrow.win{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
@@ -163,6 +172,7 @@ function applyAction(seat,m){
     case 'play': g.play(seat,m.ids); break;
     case 'undo': g.undo(seat); break;
     case 'draw': g.draw(seat,m.from,m.idx); break;
+    case 'turn': g.turn(seat,m.ids,m.from,m.idx); break;
     case 'yaniv': g.yaniv(seat); break;
     case 'next': g.next(); break;
     default: throw new Error('不明な操作です');
@@ -302,7 +312,6 @@ function scoresHTML(){
     <span class="dot ${p.online?'':'off'}"></span>${esc(p.name)}${i===S.you?'（あなた）':''}<br>
     <b>${p.score}</b> 点 <span class="muted">／${p.handCount}枚</span></div>`).join('')}</div>`;
 }
-function logHTML(){return `<ol class="log">${S.log.map(l=>`<li>${esc(l)}</li>`).join('')}</ol>`;}
 function header(sub){
   return `<h1>ヤニブ <span class="muted">${sub} ／ 部屋 ${esc(me.room)}</span></h1>
   ${offline?`<div class="banner">${H?'接続が不安定です。再接続しています…':'部屋を作った人との接続が切れました。再接続しています…'}</div>`:''}
@@ -350,50 +359,50 @@ function renderLobby(){
   </div>
   <div class="row"><button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
 }
+// 直前の動き（ログの最後の1件）を「名前」と「内容」に分けて表示
+function lastMoveHTML(){
+  const l=S.log[S.log.length-1]||'';
+  const k=l.indexOf('：');
+  return k<0?esc(l):`<b>${esc(l.slice(0,k))}</b> さん：${esc(l.slice(k+1))}`;
+}
 function renderGame(){
-  const mine=S.cur===S.you, drawing=S.phase==='draw', g=S.top;
+  const mine=S.cur===S.you, g=S.top;
   const curName=esc(S.players[S.cur].name);
   const endIdx=g.length===1?[0]:[0,g.length-1];
-  const prevCards=g.map((c,i)=>{
-    const can=mine&&drawing&&endIdx.includes(i);
-    return cardHTML(c,can?'pick':(drawing?'dim':''),can?`onclick="act('draw',{from:'pile',idx:${i}})"`:'');
-  }).join('');
-  const canDeck=mine&&drawing&&S.canDeck;
-  const selectable=mine&&!drawing;
-  const hand=S.hand.map(c=>cardHTML(c,(selectable?'click ':'')+(sel.has(c.id)?'sel':''),selectable?`onclick="toggle(${c.id})"`:'')).join('');
   const chosen=S.hand.filter(c=>sel.has(c.id));
-  const valid=analyze(chosen);
-  let controls;
-  if(!mine){
-    controls=`<p class="muted">${curName} さんが${drawing?'カードを引くところです':'考えています'}…</p>`;
-  }else if(drawing){
-    controls=`<p><b>1枚引いてください：</b>山札か、前の人のカードの光っている端を選ぶ</p>
-      <div class="row"><button onclick="act('undo')">出すのをやり直す</button></div>`;
-  }else{
-    controls=`<div class="row">
-      <button class="primary" ${valid?'':'disabled'} onclick="act('play',{ids:[...sel]})">出す${chosen.length?`（${chosen.length}枚）`:''}</button>
-      <button class="yaniv" ${S.total<=5?'':'disabled'} onclick="doYaniv()">ヤニブ！</button>
-      <span class="muted">${chosen.length&&!valid?'この組み合わせは出せません':'1枚／同じ数字2枚以上／同じマーク3枚以上の連番'}</span>
-    </div>`;
-  }
+  const valid=mine&&S.phase==='play'&&!!analyze(chosen);
+  // 出せる組を選んでいるときだけ、山札と場の端がタップできる（出す＋引くを1回で）
+  const ids=JSON.stringify([...sel]);
+  const prevCards=g.map((c,i)=>{
+    const can=valid&&endIdx.includes(i);
+    return cardHTML(c,can?'pick':'',can?`onclick='act("turn",{ids:${ids},from:"pile",idx:${i}})'`:'');
+  }).join('');
+  const canDeck=valid&&S.canDeck;
+  const hand=S.hand.map(c=>cardHTML(c,(mine?'click ':'')+(sel.has(c.id)?'sel':''),mine?`onclick="toggle(${c.id})"`:'')).join('');
+  let guide;
+  if(!mine) guide=`<p class="muted">${curName} さんが考えています…</p>`;
+  else if(!chosen.length) guide='<p><b>出すカードを選んでください</b> <span class="muted">（1枚／同じ数字2枚以上／同じマーク3枚以上の連番）</span></p>';
+  else if(!valid) guide='<p class="msg">この組み合わせは出せません</p>';
+  else guide='<p><b>山札か、場の光っているカードをタップ</b>すると、出して1枚引きます</p>';
   app.innerHTML=`${header('第'+S.round+'ラウンド')}
   <div class="panel">${scoresHTML()}</div>
   <div class="panel">
     <div class="big" style="font-size:1.1rem">${mine?'あなたの番です':curName+' さんの番'}</div>
     <div class="table">
       <div><div class="muted">山札（${S.deckCount}枚）</div>
-        <div class="cards">${canDeck?`<div class="card back pick" onclick="act('draw',{from:'deck'})">引く</div>`:`<div class="card back ${drawing&&mine?'dim':''}"></div>`}</div></div>
-      <div><div class="muted">前の人が出したカード</div><div class="cards">${prevCards}</div></div>
-      ${drawing?`<div><div class="muted">${mine?'今出したカード':curName+' さんが出したカード'}</div><div class="cards mini">${S.pending.map(c=>cardHTML(c)).join('')}</div></div>`:''}
+        <div class="cards">${canDeck?`<div class="card back pick" onclick='act("turn",{ids:${ids},from:"deck"})'>引く</div>`:'<div class="card back"></div>'}</div></div>
+      <div><div class="muted">場（前の人が出したカード）</div><div class="cards">${prevCards}</div></div>
     </div>
+    <div class="lastmove">${lastMoveHTML()}</div>
   </div>
   <div class="panel">
     <h2>あなたの手札 <span class="muted">合計 ${S.total}</span></h2>
     <div class="cards" style="padding-top:10px">${hand}</div>
     <div class="msg">${esc(err)}</div>
-    ${controls}
+    ${guide}
+    ${mine?`<div class="row"><button class="yaniv" ${S.total<=5?'':'disabled'} onclick="doYaniv()">ヤニブ！</button>
+      <span class="muted">${S.total<=5?'合計5以下なので宣言できます':'合計5以下で宣言できます'}</span></div>`:''}
   </div>
-  <div class="panel"><h2>これまで</h2>${logHTML()}</div>
   <div class="row"><button onclick="leave()">${H?'部屋を閉じる':'部屋を出る'}</button></div>`;
 }
 // 順位をつける（同じ値は同じ順位）。cmp が負なら a のほうが上

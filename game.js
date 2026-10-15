@@ -147,6 +147,12 @@ class Game {
     this.phase = 'play';
   }
 
+  // 出す＋引くを1回で（引けなかったら出したのも取り消す）
+  turn(seat, ids, from, idx) {
+    this.play(seat, ids);
+    try { this.draw(seat, from, idx); } catch (e) { this.undo(seat); throw e; }
+  }
+
   yaniv(seat) {
     this.checkTurn(seat, 'play');
     const n = this.players.length, d = seat;
