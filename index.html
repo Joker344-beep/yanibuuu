@@ -327,7 +327,7 @@ function entryHTML(){
     <div class="row"><span class="muted">または</span><button onclick="enter('create')">新しく部屋を作る</button></div>
     <div class="msg">${esc(err)}</div>
   </div>
-  <div class="panel muted">3〜5人で遊べます。誰か1人が部屋を作り、部屋番号かリンクを他の人に送ってください。
+  <div class="panel muted">2〜5人で遊べます。誰か1人が部屋を作り、部屋番号かリンクを他の人に送ってください。
   部屋を作った人は、遊び終わるまでこのページを開いたままにしてください。</div>`;
 }
 function renderLobby(){
@@ -343,8 +343,8 @@ function renderLobby(){
   <div class="panel"><h2>参加者（${S.players.length}/5）</h2>
     <ol>${S.players.map((p,i)=>`<li><span class="dot ${p.online?'':'off'}"></span>${esc(p.name)}${i===0?'（部屋主）':''}${i===S.you?'（あなた）':''}</li>`).join('')}</ol>
     ${H
-      ?`<div class="row"><button class="primary" ${S.players.length>=3?'':'disabled'} onclick="act('start')">はじめる</button>
-         <span class="muted">${S.players.length<3?'3人以上で始められます':''}</span></div>`
+      ?`<div class="row"><button class="primary" ${S.players.length>=2?'':'disabled'} onclick="act('start')">はじめる</button>
+         <span class="muted">${S.players.length<2?'2人以上で始められます':''}</span></div>`
       :'<p class="muted">部屋主が始めるのを待っています…</p>'}
     <div class="msg">${esc(err)}</div>
   </div>

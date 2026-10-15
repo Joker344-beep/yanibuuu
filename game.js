@@ -67,7 +67,7 @@ class Game {
   start(seat) {
     if (this.phase !== 'lobby') throw new Error('すでに始まっています');
     if (seat !== 0) throw new Error('開始できるのは部屋を作った人だけです');
-    if (this.players.length < 3) throw new Error('3人以上そろうと始められます');
+    if (this.players.length < 2) throw new Error('2人以上そろうと始められます');
     this.startRound();
   }
 
